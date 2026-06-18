@@ -1,0 +1,119 @@
+:root {
+  --text: #3d3d4f;
+  --text-soft: #6f7386;
+  --text-h: #141423;
+  --bg: #f5f6fb;
+  --panel-bg: #ffffff;
+  --panel-bg-soft: #fafbff;
+  --input-bg: #ffffff;
+  --button-bg: #ffffff;
+  --border: #dfe3f0;
+  --code-bg: #f4f3ec;
+  --accent: #7156d9;
+  --accent-bg: rgba(113, 86, 217, 0.12);
+  --accent-border: rgba(113, 86, 217, 0.48);
+  --shadow:
+    rgba(31, 41, 55, 0.08) 0 8px 20px -12px, rgba(31, 41, 55, 0.06) 0 2px 8px -4px;
+
+  --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
+  --heading: system-ui, 'Segoe UI', Roboto, sans-serif;
+  --mono: ui-monospace, Consolas, monospace;
+
+  font: 16px/150% var(--sans);
+  letter-spacing: 0.12px;
+  color-scheme: light;
+  color: var(--text);
+  background: var(--bg);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --text: #d7d9e3;
+    --text-soft: #97a0b8;
+    --text-h: #f6f7fb;
+    --bg: #0f1220;
+    --panel-bg: #171b2d;
+    --panel-bg-soft: #1d2337;
+    --input-bg: #111527;
+    --button-bg: #171b2d;
+    --border: #2a324a;
+    --code-bg: #1f2028;
+    --accent: #8e75ff;
+    --accent-bg: rgba(142, 117, 255, 0.18);
+    --accent-border: rgba(142, 117, 255, 0.6);
+    --shadow:
+      rgba(0, 0, 0, 0.35) 0 12px 30px -12px, rgba(0, 0, 0, 0.2) 0 2px 8px -4px;
+  }
+}
+
+#root {
+  min-height: 100vh;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+}
+
+h1,
+h2,
+h3,
+strong {
+  font-family: var(--heading);
+  font-weight: 600;
+  color: var(--text-h);
+}
+
+h1 {
+  font-size: 30px;
+  letter-spacing: -0.03em;
+  margin: 0;
+}
+
+h2 {
+  font-size: 18px;
+  margin: 0;
+}
+
+p {
+  margin: 0;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+code {
+  font-family: var(--mono);
+}
+
+code {
+  font-size: 14px;
+  line-height: 135%;
+  padding: 4px 8px;
+  background: var(--code-bg);
+  border-radius: 6px;
+  color: var(--text-h);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(127, 136, 165, 0.35);
+  border-radius: 999px;
+}
