@@ -1,3 +1,5 @@
+# 这是一个帮助总结论文、报告内容和结构以及翻译文章的阅读工具。
+
 # React + TypeScript + Vite
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
