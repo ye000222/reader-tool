@@ -1,4 +1,5 @@
 import { execFile } from 'node:child_process'
+import { isIP } from 'node:net'
 import { promisify } from 'node:util'
 
 import { JSDOM } from 'jsdom'
@@ -20,7 +21,58 @@ const powershellFetchScript = [
   'Write-Output $response.Content',
 ].join('; ')
 
+function assertPublicUrl(target) {
+  let hostname
+
+  try {
+    hostname = new URL(target).hostname
+  } catch {
+    throw new Error('请输入有效的网页地址。')
+  }
+
+  if (!hostname) {
+    throw new Error('该地址不允许抓取（内网/回环地址被拦截）。')
+  }
+
+  const normalized = hostname.toLowerCase().replace(/\.$/, '')
+
+  if (normalized === 'localhost') {
+    throw new Error('该地址不允许抓取（内网/回环地址被拦截）。')
+  }
+
+  if (isIP(hostname)) {
+    if (isPrivateIp(hostname)) {
+      throw new Error('该地址不允许抓取（内网/回环地址被拦截）。')
+    }
+  }
+}
+
+function isPrivateIp(ip) {
+  if (ip.includes(':')) {
+    return ip === '::1' || ip === '::' || /^f[cd][0-9a-f]{2}:/i.test(ip)
+  }
+
+  const parts = ip.split('.').map(Number)
+
+  if (parts.length !== 4 || parts.some((part) => Number.isNaN(part))) {
+    return true
+  }
+
+  const [a, b] = parts
+
+  if (a === 0) return true
+  if (a === 10) return true
+  if (a === 127) return true
+  if (a === 169 && b === 254) return true
+  if (a === 172 && b >= 16 && b <= 31) return true
+  if (a === 192 && b === 168) return true
+
+  return false
+}
+
 export async function fetchArticleHtml(target) {
+  assertPublicUrl(target)
+
   try {
     const response = await fetch(target, {
       headers: browserHeaders,

@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, safeStorage, session } from 'electron'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -27,6 +27,15 @@ function createWindow() {
   })
 
   if (app.isPackaged) {
+    session.defaultSession.webRequest.onHeadersReceived((_details, callback) => {
+      callback({
+        responseHeaders: {
+          'Content-Security-Policy': [
+            "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' https:; img-src 'self' data:; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'",
+          ],
+        },
+      })
+    })
     mainWindow.loadFile(path.join(__dirname, '../dist/index.html'))
   } else {
     mainWindow.loadURL(rendererUrl)
@@ -77,6 +86,32 @@ ipcMain.handle('data:export', async (_event, payload) => {
   await writeFile(result.filePath, JSON.stringify(payload, null, 2), 'utf8')
 
   return { canceled: false, filePath: result.filePath }
+})
+
+ipcMain.handle('secrets:encrypt', async (_event, plain) => {
+  const text = typeof plain === 'string' ? plain : ''
+
+  if (!safeStorage.isEncryptionAvailable()) {
+    return text
+  }
+
+  const encrypted = safeStorage.encryptString(text)
+  return `enc:${encrypted.toString('base64')}`
+})
+
+ipcMain.handle('secrets:decrypt', async (_event, cipher) => {
+  const text = typeof cipher === 'string' ? cipher : ''
+
+  if (!text.startsWith('enc:')) {
+    return text
+  }
+
+  if (!safeStorage.isEncryptionAvailable()) {
+    return text
+  }
+
+  const encrypted = Buffer.from(text.slice(4), 'base64')
+  return safeStorage.decryptString(encrypted)
 })
 
 ipcMain.handle('data:import', async () => {

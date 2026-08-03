@@ -1,6 +1,6 @@
 import { openDB } from 'idb'
 
-import type { AppSettings, ReaderDocument } from '../types'
+import type { AppSettings, ProviderConfig, ReaderDocument } from '../types'
 
 const DB_NAME = 'reader-tool-db'
 const DB_VERSION = 1
@@ -66,13 +66,68 @@ export async function deleteDocument(documentId: string) {
   await database.delete(DOCUMENT_STORE, documentId)
 }
 
+const CIPHER_PREFIX = 'enc:'
+
+async function encryptApiKeys(providers: ProviderConfig[]) {
+  const api = window.desktopApi
+  if (!api) {
+    return providers
+  }
+
+  return Promise.all(
+    providers.map(async (provider) => {
+      if (!provider.apiKey || provider.apiKey.startsWith(CIPHER_PREFIX)) {
+        return provider
+      }
+
+      const encrypted = await api.encryptSecret(provider.apiKey)
+      return { ...provider, apiKey: encrypted }
+    }),
+  )
+}
+
+async function decryptApiKeys(providers: ProviderConfig[]) {
+  const api = window.desktopApi
+  if (!api) {
+    return providers
+  }
+
+  return Promise.all(
+    providers.map(async (provider) => {
+      if (!provider.apiKey.startsWith(CIPHER_PREFIX)) {
+        return provider
+      }
+
+      const decrypted = await api.decryptSecret(provider.apiKey)
+      return { ...provider, apiKey: decrypted }
+    }),
+  )
+}
+
+function hasPlaintextApiKeys(providers: ProviderConfig[]) {
+  return providers.some(
+    (provider) => provider.apiKey && !provider.apiKey.startsWith(CIPHER_PREFIX),
+  )
+}
+
 export async function loadSettings() {
   const database = await dbPromise
-  const settings = (await database.get(SETTINGS_STORE, SETTINGS_KEY)) as AppSettings | undefined
-  return settings || defaultSettings
+  const stored = (await database.get(SETTINGS_STORE, SETTINGS_KEY)) as AppSettings | undefined
+  const settings = stored || defaultSettings
+
+  const decryptedProviders = await decryptApiKeys(settings.providers)
+  const result = { ...settings, providers: decryptedProviders }
+
+  // Migrate historical plaintext apiKeys to encrypted form on first load.
+  if (window.desktopApi && hasPlaintextApiKeys(settings.providers)) {
+    await saveSettings(result)
+  }
+
+  return result
 }
 
 export async function saveSettings(settings: AppSettings) {
   const database = await dbPromise
-  await database.put(SETTINGS_STORE, settings, SETTINGS_KEY)
+  const encryptedProviders = await encryptApiKeys(settings.providers)
+  await database.put(SETTINGS_STORE, { ...settings, providers: encryptedProviders }, SETTINGS_KEY)
 }

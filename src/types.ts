@@ -87,6 +87,8 @@ export interface DesktopApi {
   fetchArticle: (url: string) => Promise<WebArticlePayload>
   exportData: (payload: unknown) => Promise<{ canceled: boolean; filePath?: string }>
   importData: () => Promise<{ canceled: boolean; filePath?: string; content?: string }>
+  encryptSecret: (plain: string) => Promise<string>
+  decryptSecret: (cipher: string) => Promise<string>
 }
 
 declare global {
