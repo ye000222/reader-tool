@@ -19,6 +19,8 @@ interface SidePanelContentProps {
   onParagraphClick: (paragraphId: string, summaryId?: string) => void
   onGenerateSummary: () => void
   onTranslateDocument: () => void
+  onCancel: () => void
+  onAnnotationEdit: (paragraphId: string) => void
 }
 
 export function SidePanelContent({
@@ -34,6 +36,8 @@ export function SidePanelContent({
   onParagraphClick,
   onGenerateSummary,
   onTranslateDocument,
+  onCancel,
+  onAnnotationEdit,
 }: SidePanelContentProps) {
   if (!currentDocument) {
     return <div className="empty-placeholder">右侧结果将在导入文档后显示。</div>
@@ -71,6 +75,11 @@ export function SidePanelContent({
             <p>{summaryProgress.message}</p>
             <div className="progress-track" aria-hidden="true">
               <div className="progress-fill indeterminate" />
+            </div>
+            <div className="action-row">
+              <button type="button" className="button danger" onClick={onCancel}>
+                取消
+              </button>
             </div>
           </div>
         ) : null}
@@ -168,6 +177,11 @@ export function SidePanelContent({
             <div className="progress-track" aria-hidden="true">
               <div className="progress-fill" style={{ width: `${progressPercent}%` }} />
             </div>
+            <div className="action-row">
+              <button type="button" className="button danger" onClick={onCancel}>
+                取消
+              </button>
+            </div>
           </div>
         ) : null}
         {currentDocument.paragraphs.map((paragraph) => (
@@ -199,9 +213,8 @@ export function SidePanelContent({
   return currentDocument.annotations.length > 0 ? (
     <div className="stack">
       {currentDocument.annotations.map((annotation) => (
-        <button
+        <div
           key={annotation.id}
-          type="button"
           className={`result-card interactive marked marked-${annotation.color}`}
           onClick={() => onParagraphClick(annotation.paragraphId)}
         >
@@ -210,7 +223,19 @@ export function SidePanelContent({
             <span className="tag">{new Date(annotation.createdAt).toLocaleString()}</span>
           </div>
           <p>对应段落：{annotation.paragraphId}</p>
-        </button>
+          <div className="action-row">
+            <button
+              type="button"
+              className="mini-button"
+              onClick={(event) => {
+                event.stopPropagation()
+                onAnnotationEdit(annotation.paragraphId)
+              }}
+            >
+              编辑
+            </button>
+          </div>
+        </div>
       ))}
     </div>
   ) : (

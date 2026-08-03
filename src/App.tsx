@@ -9,6 +9,8 @@ import { useAiActions } from './hooks/useAiActions'
 import { useDocumentImport } from './hooks/useDocumentImport'
 import { useParagraphScroll } from './hooks/useParagraphScroll'
 import { useTextSelection } from './hooks/useTextSelection'
+import { AnnotationDialog } from './components/AnnotationDialog'
+import type { AnnotationColor } from './components/AnnotationDialog'
 import { ControlGrid } from './components/ControlGrid'
 import { Footer } from './components/Footer'
 import { ReaderPanel } from './components/ReaderPanel'
@@ -35,6 +37,10 @@ function App() {
 
   const [statusMessage, setStatusMessage] = useState('准备就绪')
   const [providerDraft, setProviderDraft] = useState<ProviderConfig | null>(null)
+  const [annotationDraft, setAnnotationDraft] = useState<{
+    paragraphId: string
+    annotation: AnnotationRecord | null
+  } | null>(null)
 
   const currentDocument = useMemo(
     () => documents.find((document) => document.id === currentDocumentId) || null,
@@ -88,6 +94,7 @@ function App() {
     generateSummary,
     translateDocumentAction,
     runSelection,
+    cancelCurrentTask,
   } = useAiActions(setStatusMessage)
 
   const {
@@ -143,38 +150,63 @@ function App() {
     [runSelection, runtimeProvider, selectionText],
   )
 
-  async function handleAddAnnotation(paragraphId: string) {
+  function handleAnnotationClick(paragraphId: string) {
     if (!currentDocument) {
       return
     }
 
-    const content = window.prompt('输入标注内容')
-    if (!content?.trim()) {
+    const existing =
+      currentDocument.annotations.find((item) => item.paragraphId === paragraphId) || null
+    setAnnotationDraft({ paragraphId, annotation: existing })
+  }
+
+  async function handleSaveAnnotation(content: string, color: AnnotationColor) {
+    if (!currentDocument || !annotationDraft) {
       return
     }
 
-    const color = (window.prompt('输入颜色：yellow / green / pink', 'yellow') || 'yellow') as
-      | 'yellow'
-      | 'green'
-      | 'pink'
-    const annotation: AnnotationRecord = {
-      id: crypto.randomUUID(),
-      paragraphId,
-      content: content.trim(),
-      color: color === 'green' || color === 'pink' ? color : 'yellow',
-      createdAt: new Date().toISOString(),
+    const existing = annotationDraft.annotation
+    const annotation: AnnotationRecord = existing
+      ? { ...existing, content, color }
+      : {
+          id: crypto.randomUUID(),
+          paragraphId: annotationDraft.paragraphId,
+          content,
+          color,
+          createdAt: new Date().toISOString(),
+        }
+
+    const updated = {
+      ...currentDocument,
+      updatedAt: new Date().toISOString(),
+      annotations: existing
+        ? currentDocument.annotations.map((item) => (item.id === existing.id ? annotation : item))
+        : [annotation, ...currentDocument.annotations],
+    }
+
+    useReaderStore.getState().upsertDocument(updated)
+    await saveDocument(updated)
+    setAnnotationDraft(null)
+    setSidePanelMode('annotations')
+    setStatusMessage(existing ? '已更新标注' : '已添加标注')
+  }
+
+  async function handleDeleteAnnotation(annotationId: string) {
+    if (!currentDocument) {
+      return
     }
 
     const updated = {
       ...currentDocument,
       updatedAt: new Date().toISOString(),
-      annotations: [annotation, ...currentDocument.annotations],
+      annotations: currentDocument.annotations.filter((item) => item.id !== annotationId),
     }
 
     useReaderStore.getState().upsertDocument(updated)
     await saveDocument(updated)
+    setAnnotationDraft(null)
     setSidePanelMode('annotations')
-    setStatusMessage('已添加标注')
+    setStatusMessage('已删除标注')
   }
 
   async function handleSaveProvider() {
@@ -244,7 +276,7 @@ function App() {
             onParagraphClick={onParagraphClick}
             onParagraphMouseUp={onParagraphMouseUp}
             onSetSelection={applyParagraphSelection}
-            onAddAnnotation={handleAddAnnotation}
+            onAnnotationClick={handleAnnotationClick}
           />
 
           <SummaryPanel
@@ -261,11 +293,22 @@ function App() {
             onParagraphClick={focusParagraph}
             onGenerateSummary={() => void generateSummary(runtimeProvider)}
             onTranslateDocument={() => void translateDocumentAction(runtimeProvider)}
+            onCancelTask={cancelCurrentTask}
+            onAnnotationEdit={handleAnnotationClick}
           />
         </main>
       </section>
 
       <Footer statusMessage={statusMessage} error={error} />
+
+      {annotationDraft ? (
+        <AnnotationDialog
+          annotation={annotationDraft.annotation}
+          onClose={() => setAnnotationDraft(null)}
+          onSave={handleSaveAnnotation}
+          onDelete={handleDeleteAnnotation}
+        />
+      ) : null}
     </div>
   )
 }

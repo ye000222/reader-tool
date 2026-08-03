@@ -24,6 +24,8 @@ interface SummaryPanelProps {
   onParagraphClick: (paragraphId: string, summaryId?: string) => void
   onGenerateSummary: () => void
   onTranslateDocument: () => void
+  onCancelTask: () => void
+  onAnnotationEdit: (paragraphId: string) => void
 }
 
 export function SummaryPanel({
@@ -40,6 +42,8 @@ export function SummaryPanel({
   onParagraphClick,
   onGenerateSummary,
   onTranslateDocument,
+  onCancelTask,
+  onAnnotationEdit,
 }: SummaryPanelProps) {
   const { sidePanelMode, setSidePanelMode, currentParagraphId, currentSummaryId } = useReaderStore()
 
@@ -72,6 +76,8 @@ export function SummaryPanel({
         setSelectionText={setSelectionText}
         selectionParagraphId={selectionParagraphId}
         onSelectionAction={onSelectionAction}
+        isBusy={isBusy}
+        onCancel={onCancelTask}
       />
 
       <div className="document-scroll">
@@ -88,6 +94,8 @@ export function SummaryPanel({
           onParagraphClick={onParagraphClick}
           onGenerateSummary={onGenerateSummary}
           onTranslateDocument={onTranslateDocument}
+          onCancel={onCancelTask}
+          onAnnotationEdit={onAnnotationEdit}
         />
       </div>
     </section>

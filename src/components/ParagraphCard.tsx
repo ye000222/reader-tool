@@ -10,7 +10,7 @@ interface ParagraphCardProps {
   onClick: (event: ReactMouseEvent<HTMLDivElement>, paragraphId: string, summaryId?: string) => void
   onMouseUp: (event: ReactMouseEvent<HTMLDivElement>, paragraphId: string) => void
   onSetSelection: (paragraphId: string, text: string) => void
-  onAddAnnotation: (paragraphId: string) => void
+  onAnnotationClick: (paragraphId: string) => void
 }
 
 export function ParagraphCard({
@@ -21,7 +21,7 @@ export function ParagraphCard({
   onClick,
   onMouseUp,
   onSetSelection,
-  onAddAnnotation,
+  onAnnotationClick,
 }: ParagraphCardProps) {
   const relatedSummaryId = paragraph.summaryIds[0]
 
@@ -53,9 +53,9 @@ export function ParagraphCard({
         <button
           type="button"
           className="mini-button"
-          onClick={() => onAddAnnotation(paragraph.id)}
+          onClick={() => onAnnotationClick(paragraph.id)}
         >
-          划重点
+          {annotation ? '编辑标注' : '划重点'}
         </button>
       </div>
     </div>

@@ -18,6 +18,9 @@ interface OpenAICompatibleResponse {
     message?: {
       content?: string
     }
+    delta?: {
+      content?: string
+    }
   }>
 }
 
@@ -30,6 +33,7 @@ interface TranslateDocumentOptions {
   }) => void
   batchSize?: number
   concurrency?: number
+  signal?: AbortSignal
 }
 
 interface GenerateDocumentSummaryOptions {
@@ -41,6 +45,7 @@ interface GenerateDocumentSummaryOptions {
   }) => void
   chunkSize?: number
   concurrency?: number
+  signal?: AbortSignal
 }
 
 interface TranslationPayloadItem {
@@ -115,7 +120,7 @@ export async function generateDocumentSummary(
               })),
             }),
           },
-        ])
+        ], { signal: options.signal })
 
         chunkDrafts[chunkIndex] = response
         completedChunks += 1
@@ -189,7 +194,7 @@ export async function generateDocumentSummary(
         })),
       }),
     },
-  ])
+  ], { signal: options.signal })
 
   const structure = resolveStructureNodes(response.structure, summaryBlocks)
   const fallbackStructure = buildFallbackStructure(summaryBlocks)
@@ -217,22 +222,27 @@ export async function runSelectionTask(
   input: string,
   action: SelectionAction,
   provider: ProviderConfig,
+  options: { signal?: AbortSignal; onDelta?: (text: string) => void } = {},
 ): Promise<SelectionTaskResult> {
   const instruction =
     action === 'summarize'
       ? '请用中文总结这段内容，输出 3 到 5 句，不要遗漏关键信息。'
       : '请把这段内容翻译成中文，并在必要时保留专有名词原文。'
 
-  const response = await requestText(provider, [
-    {
-      role: 'system',
-      content: '你是一个阅读助手。无论输入是什么语言，输出都必须使用中文。',
-    },
-    {
-      role: 'user',
-      content: `${instruction}\n\n原文：\n${input}`,
-    },
-  ])
+  const response = await requestText(
+    provider,
+    [
+      {
+        role: 'system',
+        content: '你是一个阅读助手。无论输入是什么语言，输出都必须使用中文。',
+      },
+      {
+        role: 'user',
+        content: `${instruction}\n\n原文：\n${input}`,
+      },
+    ],
+    { signal: options.signal, stream: true, onDelta: options.onDelta },
+  )
 
   return {
     action,
@@ -246,21 +256,23 @@ export async function translateDocument(
   provider: ProviderConfig,
   options: TranslateDocumentOptions = {},
 ) {
-  const payload = document.paragraphs.map((paragraph) => ({
-    id: paragraph.id,
-    text: paragraph.text,
-    translation: paragraph.translation,
-  }))
+  const payload = document.paragraphs
+    .filter((paragraph) => !paragraph.translation?.trim())
+    .map((paragraph) => ({
+      id: paragraph.id,
+      text: paragraph.text,
+    }))
+
+  if (payload.length === 0) {
+    return refreshDocumentTimestamp(document)
+  }
+
   const batchSize = Math.max(1, options.batchSize ?? 12)
   const batches = chunkArray(payload, batchSize)
   const totalParagraphs = payload.length
   const totalBatches = batches.length
   const concurrency = Math.max(1, Math.min(options.concurrency ?? 3, totalBatches || 1))
   const translationMap = new Map<string, string>()
-
-  if (totalBatches === 0) {
-    return refreshDocumentTimestamp(document)
-  }
 
   let nextBatchIndex = 0
   let completedBatches = 0
@@ -311,7 +323,7 @@ export async function translateDocument(
               paragraphs: batch.map(({ id, text }) => ({ id, text })),
             }),
           },
-        ])
+        ], { signal: options.signal })
 
         const batchTranslationMap = resolveTranslationMap(batch, response.items || [])
         batchTranslationMap.forEach((translation, paragraphId) => {
@@ -339,8 +351,12 @@ export async function translateDocument(
   })
 }
 
-async function requestJson<T>(provider: ProviderConfig, messages: ChatMessage[]) {
-  const content = await requestText(provider, messages)
+async function requestJson<T>(
+  provider: ProviderConfig,
+  messages: ChatMessage[],
+  options: { signal?: AbortSignal } = {},
+) {
+  const content = await requestText(provider, messages, { signal: options.signal })
   const normalized = stripCodeFence(content)
 
   try {
@@ -352,7 +368,11 @@ async function requestJson<T>(provider: ProviderConfig, messages: ChatMessage[])
   }
 }
 
-async function requestText(provider: ProviderConfig, messages: ChatMessage[]) {
+async function requestText(
+  provider: ProviderConfig,
+  messages: ChatMessage[],
+  options: { signal?: AbortSignal; stream?: boolean; onDelta?: (text: string) => void } = {},
+) {
   if (!provider.apiKey.trim()) {
     throw new Error('请先在右侧设置中填写可用的 API Key。')
   }
@@ -368,15 +388,86 @@ async function requestText(provider: ProviderConfig, messages: ChatMessage[]) {
       model: provider.model,
       temperature: 0.2,
       messages,
+      ...(options.stream ? { stream: true } : {}),
     }),
+    signal: options.signal,
   })
 
   if (!response.ok) {
     throw new Error(`AI 请求失败：${response.status} ${response.statusText}`)
   }
 
+  if (options.stream && response.body) {
+    return readStreamingContent(response.body, options.onDelta)
+  }
+
   const payload = (await response.json()) as OpenAICompatibleResponse
   const content = payload.choices?.[0]?.message?.content?.trim()
+
+  if (!content) {
+    throw new Error('AI 未返回有效内容。')
+  }
+
+  return content
+}
+
+async function readStreamingContent(
+  body: ReadableStream<Uint8Array>,
+  onDelta?: (text: string) => void,
+) {
+  const reader = body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+  let fallbackText = ''
+  let content = ''
+
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) {
+      break
+    }
+
+    const chunk = decoder.decode(value, { stream: true })
+    fallbackText += chunk
+    buffer += chunk
+
+    const lines = buffer.split('\n')
+    buffer = lines.pop() || ''
+
+    for (const line of lines) {
+      const trimmed = line.trim()
+      if (!trimmed.startsWith('data:')) {
+        continue
+      }
+
+      const data = trimmed.slice(5).trim()
+      if (!data || data === '[DONE]') {
+        continue
+      }
+
+      try {
+        const parsed = JSON.parse(data) as OpenAICompatibleResponse
+        const delta =
+          parsed.choices?.[0]?.delta?.content || parsed.choices?.[0]?.message?.content || ''
+        if (delta) {
+          content += delta
+          onDelta?.(content)
+        }
+      } catch {
+        // 忽略无法解析的 SSE 块，兼容非标准流式实现。
+      }
+    }
+  }
+
+  // 流式未产出内容时，尝试把完整响应体当作普通 JSON 解析（兼容不支持流式的代理）。
+  if (!content) {
+    try {
+      const parsed = JSON.parse(fallbackText) as OpenAICompatibleResponse
+      content = parsed.choices?.[0]?.message?.content?.trim() || ''
+    } catch {
+      // 忽略，下方统一报错。
+    }
+  }
 
   if (!content) {
     throw new Error('AI 未返回有效内容。')

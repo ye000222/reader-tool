@@ -373,6 +373,98 @@
   color: #d14343;
 }
 
+.button.danger {
+  color: #d14343;
+  border-color: rgba(209, 67, 67, 0.45);
+  background: rgba(209, 67, 67, 0.08);
+}
+
+.button.danger:hover {
+  border-color: rgba(209, 67, 67, 0.7);
+  background: rgba(209, 67, 67, 0.14);
+}
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(15, 18, 32, 0.45);
+}
+
+.modal-card {
+  width: 100%;
+  max-width: 460px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 20px;
+  background: var(--panel-bg);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  box-shadow: var(--shadow);
+}
+
+.modal-card textarea {
+  width: 100%;
+  min-height: 108px;
+  resize: vertical;
+  padding: 10px 12px;
+  background: var(--input-bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--text);
+}
+
+.modal-card textarea:focus {
+  outline: none;
+  border-color: var(--accent-border);
+}
+
+.modal-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.color-swatches {
+  display: flex;
+  gap: 10px;
+}
+
+.color-swatch {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  transition: border-color 0.2s ease, transform 0.2s ease;
+}
+
+.color-swatch:hover {
+  transform: scale(1.08);
+}
+
+.color-swatch.selected {
+  border-color: var(--accent);
+}
+
+.color-swatch.yellow {
+  background: #f4b400;
+}
+
+.color-swatch.green {
+  background: #2ba24c;
+}
+
+.color-swatch.pink {
+  background: #e64980;
+}
+
 @media (max-width: 1280px) {
   .control-grid,
   .workspace,

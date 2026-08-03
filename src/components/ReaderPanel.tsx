@@ -12,7 +12,7 @@ interface ReaderPanelProps {
   onParagraphClick: (event: ReactMouseEvent<HTMLDivElement>, paragraphId: string, summaryId?: string) => void
   onParagraphMouseUp: (event: ReactMouseEvent<HTMLDivElement>, paragraphId: string) => void
   onSetSelection: (paragraphId: string, text: string) => void
-  onAddAnnotation: (paragraphId: string) => void
+  onAnnotationClick: (paragraphId: string) => void
 }
 
 export function ReaderPanel({
@@ -23,7 +23,7 @@ export function ReaderPanel({
   onParagraphClick,
   onParagraphMouseUp,
   onSetSelection,
-  onAddAnnotation,
+  onAnnotationClick,
 }: ReaderPanelProps) {
   return (
     <section className="reader-panel">
@@ -56,7 +56,7 @@ export function ReaderPanel({
                 onClick={onParagraphClick}
                 onMouseUp={onParagraphMouseUp}
                 onSetSelection={onSetSelection}
-                onAddAnnotation={onAddAnnotation}
+                onAnnotationClick={onAnnotationClick}
               />
             )
           })

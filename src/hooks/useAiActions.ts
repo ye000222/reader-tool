@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 
 import { generateDocumentSummary, runSelectionTask, translateDocument } from '../services/ai'
 import { saveDocument } from '../services/storage'
@@ -18,6 +18,10 @@ interface TranslationProgressState {
   totalBatches: number
   completedParagraphs: number
   totalParagraphs: number
+}
+
+function isAbortError(error: unknown) {
+  return error instanceof DOMException && error.name === 'AbortError'
 }
 
 export function useAiActions(onStatus: (message: string) => void) {
@@ -40,6 +44,7 @@ export function useAiActions(onStatus: (message: string) => void) {
   const [translationProgress, setTranslationProgress] = useState<TranslationProgressState | null>(
     null,
   )
+  const abortRef = useRef<AbortController | null>(null)
 
   const validateAiAction = useCallback(
     (actionLabel: string, provider: ProviderConfig | null) => {
@@ -68,12 +73,24 @@ export function useAiActions(onStatus: (message: string) => void) {
     [currentDocument, onStatus, setError],
   )
 
+  const cancelCurrentTask = useCallback(() => {
+    abortRef.current?.abort()
+    abortRef.current = null
+    setBusy(false)
+    setSummaryProgress(null)
+    setTranslationProgress(null)
+    onStatus('已取消当前 AI 任务')
+  }, [onStatus, setBusy, setSummaryProgress, setTranslationProgress])
+
   const generateSummary = useCallback(
     async (provider: ProviderConfig | null) => {
       const validProvider = validateAiAction('全文总结', provider)
       if (!currentDocument || !validProvider) {
         return
       }
+
+      const controller = new AbortController()
+      abortRef.current = controller
 
       try {
         setBusy(true)
@@ -85,6 +102,7 @@ export function useAiActions(onStatus: (message: string) => void) {
         })
         onStatus('正在生成全文总结...')
         const updated = await generateDocumentSummary(currentDocument, validProvider, {
+          signal: controller.signal,
           onProgress: ({ stage, message, completedChunks, totalChunks }) => {
             setSummaryProgress({
               stage,
@@ -99,14 +117,31 @@ export function useAiActions(onStatus: (message: string) => void) {
         setSummaryProgress(null)
         onStatus('已生成全文总结和结构')
       } catch (appError) {
+        if (isAbortError(appError)) {
+          onStatus('已取消全文总结')
+          return
+        }
+
         setError(toMessage(appError))
         setSummaryProgress(null)
         onStatus('全文总结失败')
       } finally {
+        if (abortRef.current === controller) {
+          abortRef.current = null
+        }
         setBusy(false)
       }
     },
-    [currentDocument, onStatus, setError, setBusy, setSidePanelMode, setSummaryProgress, upsertDocument, validateAiAction],
+    [
+      currentDocument,
+      onStatus,
+      setError,
+      setBusy,
+      setSidePanelMode,
+      setSummaryProgress,
+      upsertDocument,
+      validateAiAction,
+    ],
   )
 
   const translateDocumentAction = useCallback(
@@ -115,6 +150,9 @@ export function useAiActions(onStatus: (message: string) => void) {
       if (!currentDocument || !validProvider) {
         return
       }
+
+      const controller = new AbortController()
+      abortRef.current = controller
 
       try {
         setBusy(true)
@@ -128,6 +166,7 @@ export function useAiActions(onStatus: (message: string) => void) {
         })
         onStatus('正在生成全文翻译...')
         const updated = await translateDocument(currentDocument, validProvider, {
+          signal: controller.signal,
           onProgress: ({ completedBatches, totalBatches, completedParagraphs, totalParagraphs }) => {
             setTranslationProgress({
               completedBatches,
@@ -142,14 +181,31 @@ export function useAiActions(onStatus: (message: string) => void) {
         setTranslationProgress(null)
         onStatus('已生成全文翻译')
       } catch (appError) {
+        if (isAbortError(appError)) {
+          onStatus('已取消全文翻译')
+          return
+        }
+
         setError(toMessage(appError))
         setTranslationProgress(null)
         onStatus('全文翻译失败')
       } finally {
+        if (abortRef.current === controller) {
+          abortRef.current = null
+        }
         setBusy(false)
       }
     },
-    [currentDocument, onStatus, setError, setBusy, setSidePanelMode, setTranslationProgress, upsertDocument, validateAiAction],
+    [
+      currentDocument,
+      onStatus,
+      setError,
+      setBusy,
+      setSidePanelMode,
+      setTranslationProgress,
+      upsertDocument,
+      validateAiAction,
+    ],
   )
 
   const runSelection = useCallback(
@@ -168,18 +224,35 @@ export function useAiActions(onStatus: (message: string) => void) {
         return
       }
 
+      const controller = new AbortController()
+      abortRef.current = controller
+
       try {
         setBusy(true)
         setError('')
-        onStatus(action === 'summarize' ? '正在生成局部总结...' : '正在生成局部翻译...')
-        const result = await runSelectionTask(input, action, validProvider)
-        setSelectionResult(result)
         setSidePanelMode('selection')
+        setSelectionResult({ action, input, output: '' })
+        onStatus(action === 'summarize' ? '正在生成局部总结...' : '正在生成局部翻译...')
+        const result = await runSelectionTask(input, action, validProvider, {
+          signal: controller.signal,
+          onDelta: (output) => {
+            setSelectionResult({ action, input, output })
+          },
+        })
+        setSelectionResult(result)
         onStatus(action === 'summarize' ? '已完成局部总结' : '已完成局部翻译')
       } catch (appError) {
+        if (isAbortError(appError)) {
+          onStatus(action === 'summarize' ? '已取消局部总结' : '已取消局部翻译')
+          return
+        }
+
         setError(toMessage(appError))
         onStatus(action === 'summarize' ? '局部总结失败' : '局部翻译失败')
       } finally {
+        if (abortRef.current === controller) {
+          abortRef.current = null
+        }
         setBusy(false)
       }
     },
@@ -192,6 +265,7 @@ export function useAiActions(onStatus: (message: string) => void) {
     generateSummary,
     translateDocumentAction,
     runSelection,
+    cancelCurrentTask,
   }
 }
 
