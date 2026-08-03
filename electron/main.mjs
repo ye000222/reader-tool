@@ -1,65 +1,12 @@
 import { app, BrowserWindow, dialog, ipcMain } from 'electron'
-import { execFile } from 'node:child_process'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { promisify } from 'node:util'
 
-import { JSDOM } from 'jsdom'
-import { Readability } from '@mozilla/readability'
+import { fetchArticleHtml, parseArticleFromHtml } from '../shared/fetch-article.mjs'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 const rendererUrl = 'http://127.0.0.1:5173'
-const execFileAsync = promisify(execFile)
-const browserHeaders = {
-  'User-Agent':
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-  Accept: 'text/html,application/xhtml+xml',
-}
-const powershellFetchScript = [
-  "$ProgressPreference = 'SilentlyContinue'",
-  "$headers = @{ 'User-Agent' = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'; 'Accept' = 'text/html,application/xhtml+xml' }",
-  "$response = Invoke-WebRequest -Uri $env:TARGET_URL -UseBasicParsing -Headers $headers -TimeoutSec 30",
-  '[Console]::OutputEncoding = [System.Text.Encoding]::UTF8',
-  'Write-Output $response.Content',
-].join('; ')
-
-async function fetchHtmlForArticle(target) {
-  try {
-    const response = await fetch(target, {
-      headers: browserHeaders,
-    })
-
-    if (!response.ok) {
-      throw new Error(`网页抓取失败：${response.status} ${response.statusText}`)
-    }
-
-    return await response.text()
-  } catch (error) {
-    if (process.platform !== 'win32') {
-      throw error
-    }
-
-    try {
-      const result = await execFileAsync(
-        'powershell',
-        ['-NoProfile', '-Command', powershellFetchScript],
-        {
-          cwd: process.cwd(),
-          env: {
-            ...process.env,
-            TARGET_URL: target,
-          },
-          maxBuffer: 20 * 1024 * 1024,
-        },
-      )
-
-      return result.stdout
-    } catch {
-      throw error
-    }
-  }
-}
 
 /** @type {BrowserWindow | null} */
 let mainWindow = null
@@ -110,28 +57,8 @@ ipcMain.handle('article:fetch', async (_event, url) => {
     throw new Error('请输入有效的网页地址，必须以 http:// 或 https:// 开头。')
   }
 
-  try {
-    const html = await fetchHtmlForArticle(target)
-    const dom = new JSDOM(html, { url: target })
-    const reader = new Readability(dom.window.document)
-    const article = reader.parse()
-
-    if (!article?.textContent?.trim()) {
-      throw new Error('无法从该网页中提取正文内容。')
-    }
-
-    const payload = {
-      url: target,
-      title: article.title || target,
-      byline: article.byline || '',
-      excerpt: article.excerpt || '',
-      textContent: article.textContent,
-    }
-
-    return payload
-  } catch (error) {
-    throw error
-  }
+  const html = await fetchArticleHtml(target)
+  return parseArticleFromHtml(html, target)
 })
 
 ipcMain.handle('data:export', async (_event, payload) => {
